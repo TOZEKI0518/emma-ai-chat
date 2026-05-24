@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mic,
@@ -8,7 +8,7 @@ import {
   Volume2,
   Sparkles,
   MessageCircle,
- Languages,
+  Languages,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,47 +45,66 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [showJapanese, setShowJapanese] = useState(true);
-
+  const [speechReady, setSpeechReady] = useState(false);
   const [expression, setExpression] =
     useState<keyof typeof emmaImages>("normal");
 
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  const unlockSpeech = () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+    const utterance = new SpeechSynthesisUtterance(" ");
+    utterance.volume = 0;
+    window.speechSynthesis.speak(utterance);
+    setSpeechReady(true);
+  };
+
+  const getBestVoice = () => {
+    const voices = window.speechSynthesis.getVoices();
+
+    return (
+      voices.find((voice) => voice.name.includes("Jenny")) ||
+      voices.find((voice) => voice.name.includes("Aria")) ||
+      voices.find((voice) => voice.name.includes("Samantha")) ||
+      voices.find((voice) => voice.name.includes("Zira")) ||
+      voices.find(
+        (voice) =>
+          voice.lang.startsWith("en") &&
+          voice.name.toLowerCase().includes("female")
+      ) ||
+      voices.find((voice) => voice.lang === "en-US") ||
+      voices.find((voice) => voice.lang.startsWith("en")) ||
+      null
+    );
+  };
+
   const speak = (text: string) => {
-    if (!window.speechSynthesis) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-
     utterance.lang = "en-US";
+    utterance.rate = 0.9;
+    utterance.pitch = 1.15;
+    utterance.volume = 1;
 
-    // 可愛い感じ寄り
-    utterance.rate = 0.95;
-    utterance.pitch = 1.25;
-
-    const voices = speechSynthesis.getVoices();
-
-    // 女性音声優先
-    const femaleVoice =
-      voices.find((voice) =>
-        voice.name.includes("Jenny")
-      ) ||
-      voices.find((voice) =>
-        voice.name.includes("Aria")
-      ) ||
-      voices.find((voice) =>
-        voice.name.includes("Samantha")
-      ) ||
-      voices.find((voice) =>
-        voice.name.includes("Zira")
-      ) ||
-      voices.find((voice) =>
-        voice.name.toLowerCase().includes("female")
-      );
-
-    if (femaleVoice) {
-      utterance.voice = femaleVoice;
-    }
+    const voice = getBestVoice();
+    if (voice) utterance.voice = voice;
 
     utterance.onstart = () => {
       setIsSpeaking(true);
@@ -94,7 +113,6 @@ export default function Home() {
 
     utterance.onend = () => {
       setIsSpeaking(false);
-
       setExpression("smile");
 
       setTimeout(() => {
@@ -102,14 +120,74 @@ export default function Home() {
       }, 1500);
     };
 
-    speechSynthesis.speak(utterance);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setExpression("surprised");
+    };
+
+    window.speechSynthesis.speak(utterance);
+
+    // スマホで途中停止する場合の保険
+    setTimeout(() => {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }, 300);
+  };
+
+  const startListening = () => {
+    if (typeof window === "undefined") return;
+
+    unlockSpeech();
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("このブラウザは音声入力に対応していない可能性があります。Chromeで試してください。");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setExpression("thinking");
+    };
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      setInput(transcript);
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+      setExpression("surprised");
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setExpression("normal");
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
 
   const sendMessage = async () => {
     if (!input.trim()) return;
 
+    unlockSpeech();
     setIsSpeaking(false);
-
     setExpression("thinking");
 
     const userText = input.trim();
@@ -124,7 +202,6 @@ export default function Home() {
     const newMessages = [...messages, userMessage];
 
     setMessages(newMessages);
-
     setInput("");
 
     try {
@@ -141,16 +218,9 @@ export default function Home() {
 
       const data = await res.json();
 
-      // 内容に応じた表情
-      const replyText = (
-        data.reply ||
-        ""
-      ).toLowerCase();
+      const replyText = (data.reply || "").toLowerCase();
 
-      if (
-        replyText.includes("wow") ||
-        replyText.includes("really")
-      ) {
+      if (replyText.includes("wow") || replyText.includes("really")) {
         setExpression("surprised");
       } else if (
         replyText.includes("great") ||
@@ -158,10 +228,7 @@ export default function Home() {
         replyText.includes("good")
       ) {
         setExpression("smile");
-      } else if (
-        replyText.includes("😉") ||
-        replyText.includes("cute")
-      ) {
+      } else if (replyText.includes("😉") || replyText.includes("cute")) {
         setExpression("wink");
       } else {
         setExpression("smile");
@@ -169,60 +236,50 @@ export default function Home() {
 
       const emmaReply: Message = {
         role: "emma",
-        english:
-          data.reply ||
-          data.error ||
-          "Sorry, I could not reply.",
+        english: data.reply || data.error || "Sorry, I could not reply.",
         japanese: null,
         correction: null,
       };
 
-      setMessages((prev) => [
-        ...prev,
-        emmaReply,
-      ]);
+      setMessages((prev) => [...prev, emmaReply]);
 
       setTimeout(() => {
         speak(emmaReply.english);
-      }, 300);
+      }, 500);
     } catch {
       setExpression("surprised");
 
       const errorReply: Message = {
         role: "emma",
-        english:
-          "Sorry, something went wrong.",
+        english: "Sorry, something went wrong.",
         japanese: null,
         correction: null,
       };
 
-      setMessages((prev) => [
-        ...prev,
-        errorReply,
-      ]);
+      setMessages((prev) => [...prev, errorReply]);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50">
+    <div
+      className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-orange-50"
+      onClick={() => {
+        if (!speechReady) unlockSpeech();
+      }}
+    >
       <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-5">
         <header className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-rose-400">
               AI English Partner
             </p>
-
-            <h1 className="text-2xl font-bold">
-              Talk with Emma
-            </h1>
+            <h1 className="text-2xl font-bold">Talk with Emma</h1>
           </div>
 
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              setShowJapanese(!showJapanese)
-            }
+            onClick={() => setShowJapanese(!showJapanese)}
           >
             <Languages className="mr-1 h-4 w-4" />
             JP
@@ -238,13 +295,8 @@ export default function Home() {
                 className="h-full w-full object-cover object-top"
                 animate={
                   isSpeaking
-                    ? {
-                        scale: [1, 1.02, 1],
-                        y: [0, -2, 0],
-                      }
-                    : {
-                        scale: [1, 1.01, 1],
-                      }
+                    ? { scale: [1, 1.02, 1], y: [0, -2, 0] }
+                    : { scale: [1, 1.01, 1] }
                 }
                 transition={{
                   duration: isSpeaking ? 0.7 : 3,
@@ -253,7 +305,9 @@ export default function Home() {
               />
 
               <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold shadow">
-                {isSpeaking
+                {isListening
+                  ? "Listening..."
+                  : isSpeaking
                   ? "Emma is speaking..."
                   : "Emma"}
               </div>
@@ -270,36 +324,26 @@ export default function Home() {
             <div
               key={index}
               className={`flex ${
-                msg.role === "user"
-                  ? "justify-end"
-                  : "justify-start"
+                msg.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
               <div
                 className={`max-w-[82%] rounded-3xl px-4 py-3 shadow ${
-                  msg.role === "user"
-                    ? "bg-rose-400 text-white"
-                    : "bg-white"
+                  msg.role === "user" ? "bg-rose-400 text-white" : "bg-white"
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
                   <MessageCircle className="h-3.5 w-3.5" />
-
-                  {msg.role === "user"
-                    ? "You"
-                    : "Emma"}
+                  {msg.role === "user" ? "You" : "Emma"}
                 </div>
 
-                <p className="text-sm leading-relaxed">
-                  {msg.english}
-                </p>
+                <p className="text-sm leading-relaxed">{msg.english}</p>
 
-                {showJapanese &&
-                  msg.japanese && (
-                    <p className="mt-2 border-t pt-2 text-xs text-slate-500">
-                      {msg.japanese}
-                    </p>
-                  )}
+                {showJapanese && msg.japanese && (
+                  <p className="mt-2 border-t pt-2 text-xs text-slate-500">
+                    {msg.japanese}
+                  </p>
+                )}
 
                 {msg.correction && (
                   <p className="mt-2 rounded-2xl bg-white/20 p-2 text-xs">
@@ -310,9 +354,10 @@ export default function Home() {
                 {msg.role === "emma" && (
                   <button
                     className="mt-2 inline-flex items-center gap-1 text-xs text-rose-500"
-                    onClick={() =>
-                      speak(msg.english)
-                    }
+                    onClick={() => {
+                      unlockSpeech();
+                      speak(msg.english);
+                    }}
                   >
                     <Volume2 className="h-3.5 w-3.5" />
                     Replay
@@ -327,21 +372,23 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
-              className="h-11 w-11 rounded-full bg-rose-100 text-rose-500"
+              onClick={startListening}
+              className={`h-11 w-11 rounded-full ${
+                isListening
+                  ? "bg-rose-400 text-white"
+                  : "bg-rose-100 text-rose-500"
+              }`}
             >
               <Mic className="h-5 w-5" />
             </Button>
 
             <input
               value={input}
-              onChange={(e) =>
-                setInput(e.target.value)
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder={
+                isListening ? "Listening..." : "Type or speak in English..."
               }
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                sendMessage()
-              }
-              placeholder="Type in English..."
               className="h-11 flex-1 rounded-full border border-rose-100 bg-rose-50 px-4 text-sm outline-none"
             />
 

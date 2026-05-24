@@ -1,0 +1,7 @@
+git remote add origin https://github.com/TOZEKI0518/emma-ai-chat.git
+git branch -M main
+git push -u origin main
+
+
+API Key
+AIzaSyA9tltZKtTBuK8wELKV22Pw7TM3oWwStDo
