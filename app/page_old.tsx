@@ -25,35 +25,12 @@ const expressionNames = [
 
 type Expression = (typeof expressionNames)[number];
 
-const frameCountMap: Record<Expression, number> = {
-  normal: 5,
-  smile: 5,
-  speaking: 5,
-  thinking: 5,
-  surprised: 5,
-  wink: 5,
-};
+const frameCount = 5;
 
-const getFrameSrcCandidates = (expression: Expression, frame: number) => {
+const getFrameSrc = (expression: Expression, frame: number) => {
   const num = String(frame).padStart(2, "0");
-
-  return [
-    // 推奨配置:
-    // public/emma/normal/emma-normal-01.png
-    // public/emma/speaking/emma-speaking-01.png
-    `/emma/${expression}/emma-${expression}-${num}.png`,
-
-    // 今回のフォルダが public/normal, public/smile のように直下にある場合:
-    // public/normal/emma-normal-01.png
-    `/${expression}/emma-${expression}-${num}.png`,
-
-    // 旧配置:
-    // public/emma-normal-01.png
-    `/emma-${expression}-${num}.png`,
-  ];
+  return `/emma-${expression}-${num}.png`;
 };
-
-const backgroundSrc = "/bg/room.png";
 
 type Message = {
   role: "user" | "emma";
@@ -82,16 +59,13 @@ export default function Home() {
   const [speechReady, setSpeechReady] = useState(false);
   const [expression, setExpression] = useState<Expression>("normal");
   const [frame, setFrame] = useState(1);
-  const [imagePathIndex, setImagePathIndex] = useState(0);
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const imageCandidates = useMemo(() => {
-    return getFrameSrcCandidates(expression, frame);
+  const currentImage = useMemo(() => {
+    return getFrameSrc(expression, frame);
   }, [expression, frame]);
-
-  const currentImage = imageCandidates[imagePathIndex] ?? imageCandidates[0];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -106,7 +80,6 @@ export default function Home() {
 
   useEffect(() => {
     setFrame(1);
-    setImagePathIndex(0);
   }, [expression]);
 
   useEffect(() => {
@@ -121,8 +94,7 @@ export default function Home() {
 
     const timer = window.setInterval(() => {
       setFrame((prev) => {
-        const maxFrame = frameCountMap[expression];
-        if (prev >= maxFrame) return 1;
+        if (prev >= frameCount) return 1;
         return prev + 1;
       });
     }, intervalMs);
@@ -331,8 +303,8 @@ export default function Home() {
       const emmaReply: Message = {
         role: "emma",
         english: data.reply || data.error || "Sorry, I could not reply.",
-        japanese: data.japanese || null,
-        correction: data.correction || null,
+        japanese: null,
+        correction: null,
       };
 
       const nextExpression = chooseExpressionFromReply(emmaReply.english);
@@ -349,7 +321,7 @@ export default function Home() {
       const errorReply: Message = {
         role: "emma",
         english: "Sorry, something went wrong.",
-        japanese: "ごめんね、エラーが起きたみたい。",
+        japanese: null,
         correction: null,
       };
 
@@ -386,29 +358,10 @@ export default function Home() {
         <Card className="overflow-hidden rounded-3xl shadow-xl">
           <CardContent className="p-0">
             <div className="relative h-80 overflow-hidden bg-pink-100">
-              {/* 背景は固定。public/bg/room.png を配置してください。 */}
-              <img
-                src={backgroundSrc}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover object-center"
-                draggable={false}
-              />
-
-              <div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-white/10" />
-
-              {/* キャラクターだけを動かす。背景は動かないので自然に見えます。 */}
               <motion.img
-                key={`${expression}-${frame}-${imagePathIndex}`}
                 src={currentImage}
                 alt="Emma"
-                className="absolute inset-0 h-full w-full object-contain object-bottom"
-                draggable={false}
-                onError={() => {
-                  setImagePathIndex((prev) => {
-                    const next = prev + 1;
-                    return next < imageCandidates.length ? next : prev;
-                  });
-                }}
+                className="h-full w-full object-cover object-top"
                 animate={
                   isSpeaking
                     ? {
@@ -423,11 +376,6 @@ export default function Home() {
                     : expression === "surprised"
                     ? {
                         scale: [1, 1.018, 1],
-                      }
-                    : expression === "wink"
-                    ? {
-                        rotate: [0, -0.4, 0.4, 0],
-                        scale: [1, 1.01, 1],
                       }
                     : {
                         scale: [1, 1.006, 1],

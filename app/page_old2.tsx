@@ -34,23 +34,21 @@ const frameCountMap: Record<Expression, number> = {
   wink: 5,
 };
 
-const getFrameSrcCandidates = (expression: Expression, frame: number) => {
+const getFrameSrc = (expression: Expression, frame: number) => {
   const num = String(frame).padStart(2, "0");
 
-  return [
-    // 推奨配置:
-    // public/emma/normal/emma-normal-01.png
-    // public/emma/speaking/emma-speaking-01.png
-    `/emma/${expression}/emma-${expression}-${num}.png`,
+  // 推奨配置:
+  // public/emma/normal/emma-normal-01.png
+  // public/emma/speaking/emma-speaking-01.png
+  return `/emma/${expression}/emma-${expression}-${num}.png`;
+};
 
-    // 今回のフォルダが public/normal, public/smile のように直下にある場合:
-    // public/normal/emma-normal-01.png
-    `/${expression}/emma-${expression}-${num}.png`,
+const getFallbackFrameSrc = (expression: Expression, frame: number) => {
+  const num = String(frame).padStart(2, "0");
 
-    // 旧配置:
-    // public/emma-normal-01.png
-    `/emma-${expression}-${num}.png`,
-  ];
+  // 旧配置にも対応:
+  // public/emma-normal-01.png
+  return `/emma-${expression}-${num}.png`;
 };
 
 const backgroundSrc = "/bg/room.png";
@@ -82,16 +80,16 @@ export default function Home() {
   const [speechReady, setSpeechReady] = useState(false);
   const [expression, setExpression] = useState<Expression>("normal");
   const [frame, setFrame] = useState(1);
-  const [imagePathIndex, setImagePathIndex] = useState(0);
+  const [useFallbackImage, setUseFallbackImage] = useState(false);
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const imageCandidates = useMemo(() => {
-    return getFrameSrcCandidates(expression, frame);
-  }, [expression, frame]);
-
-  const currentImage = imageCandidates[imagePathIndex] ?? imageCandidates[0];
+  const currentImage = useMemo(() => {
+    return useFallbackImage
+      ? getFallbackFrameSrc(expression, frame)
+      : getFrameSrc(expression, frame);
+  }, [expression, frame, useFallbackImage]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -106,7 +104,7 @@ export default function Home() {
 
   useEffect(() => {
     setFrame(1);
-    setImagePathIndex(0);
+    setUseFallbackImage(false);
   }, [expression]);
 
   useEffect(() => {
@@ -398,16 +396,15 @@ export default function Home() {
 
               {/* キャラクターだけを動かす。背景は動かないので自然に見えます。 */}
               <motion.img
-                key={`${expression}-${frame}-${imagePathIndex}`}
+                key={`${expression}-${frame}-${useFallbackImage ? "fallback" : "main"}`}
                 src={currentImage}
                 alt="Emma"
                 className="absolute inset-0 h-full w-full object-contain object-bottom"
                 draggable={false}
                 onError={() => {
-                  setImagePathIndex((prev) => {
-                    const next = prev + 1;
-                    return next < imageCandidates.length ? next : prev;
-                  });
+                  if (!useFallbackImage) {
+                    setUseFallbackImage(true);
+                  }
                 }}
                 animate={
                   isSpeaking
