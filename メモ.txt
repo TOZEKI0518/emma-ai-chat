@@ -4,4 +4,13 @@ git push -u origin main
 
 
 API Key
-AIzaSyA9tltZKtTBuK8wELKV22Pw7TM3oWwStDo
+AIzaSyAKqfa4aW1GeSzYhhoJwtIq5DyqBFWdbiY
+
+
+
+
+npm run build
+
+git add .
+git commit -m "Add Emma animation frames"
+git push

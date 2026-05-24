@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mic,
@@ -14,13 +14,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const emmaImages = {
-  normal: "/emma-normal.png",
-  smile: "/emma-smile.png",
-  speaking: "/emma-speaking.png",
-  thinking: "/emma-thinking.png",
-  surprised: "/emma-surprised.png",
-  wink: "/emma-wink.png",
+const expressionNames = [
+  "normal",
+  "smile",
+  "speaking",
+  "thinking",
+  "surprised",
+  "wink",
+] as const;
+
+type Expression = (typeof expressionNames)[number];
+
+const frameCount = 5;
+
+const getFrameSrc = (expression: Expression, frame: number) => {
+  const num = String(frame).padStart(2, "0");
+  return `/emma-${expression}-${num}.png`;
 };
 
 type Message = {
@@ -48,10 +57,15 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [showJapanese, setShowJapanese] = useState(true);
   const [speechReady, setSpeechReady] = useState(false);
-  const [expression, setExpression] =
-    useState<keyof typeof emmaImages>("normal");
+  const [expression, setExpression] = useState<Expression>("normal");
+  const [frame, setFrame] = useState(1);
 
   const recognitionRef = useRef<any>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const currentImage = useMemo(() => {
+    return getFrameSrc(expression, frame);
+  }, [expression, frame]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -63,6 +77,37 @@ export default function Home() {
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
+
+  useEffect(() => {
+    setFrame(1);
+  }, [expression]);
+
+  useEffect(() => {
+    let intervalMs = 700;
+
+    if (expression === "speaking") intervalMs = 130;
+    if (expression === "thinking") intervalMs = 520;
+    if (expression === "surprised") intervalMs = 260;
+    if (expression === "wink") intervalMs = 420;
+    if (expression === "smile") intervalMs = 650;
+    if (expression === "normal") intervalMs = 900;
+
+    const timer = window.setInterval(() => {
+      setFrame((prev) => {
+        if (prev >= frameCount) return 1;
+        return prev + 1;
+      });
+    }, intervalMs);
+
+    return () => window.clearInterval(timer);
+  }, [expression]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [messages]);
 
   const unlockSpeech = () => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -117,7 +162,7 @@ export default function Home() {
 
       setTimeout(() => {
         setExpression("normal");
-      }, 1500);
+      }, 1800);
     };
 
     utterance.onerror = () => {
@@ -127,7 +172,6 @@ export default function Home() {
 
     window.speechSynthesis.speak(utterance);
 
-    // スマホで途中停止する場合の保険
     setTimeout(() => {
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
@@ -145,11 +189,14 @@ export default function Home() {
       (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert("このブラウザは音声入力に対応していない可能性があります。Chromeで試してください。");
+      alert(
+        "このブラウザは音声入力に対応していない可能性があります。Chromeで試してください。"
+      );
       return;
     }
 
     const recognition = new SpeechRecognition();
+
     recognition.lang = "en-US";
     recognition.interimResults = true;
     recognition.continuous = false;
@@ -181,6 +228,41 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     recognition.start();
+  };
+
+  const chooseExpressionFromReply = (reply: string): Expression => {
+    const text = reply.toLowerCase();
+
+    if (
+      text.includes("wow") ||
+      text.includes("really") ||
+      text.includes("amazing") ||
+      text.includes("surprising")
+    ) {
+      return "surprised";
+    }
+
+    if (
+      text.includes("great") ||
+      text.includes("nice") ||
+      text.includes("good") ||
+      text.includes("wonderful") ||
+      text.includes("awesome") ||
+      text.includes("congratulations")
+    ) {
+      return "smile";
+    }
+
+    if (
+      text.includes("😉") ||
+      text.includes("cute") ||
+      text.includes("secret") ||
+      text.includes("between us")
+    ) {
+      return "wink";
+    }
+
+    return "smile";
   };
 
   const sendMessage = async () => {
@@ -218,28 +300,15 @@ export default function Home() {
 
       const data = await res.json();
 
-      const replyText = (data.reply || "").toLowerCase();
-
-      if (replyText.includes("wow") || replyText.includes("really")) {
-        setExpression("surprised");
-      } else if (
-        replyText.includes("great") ||
-        replyText.includes("nice") ||
-        replyText.includes("good")
-      ) {
-        setExpression("smile");
-      } else if (replyText.includes("😉") || replyText.includes("cute")) {
-        setExpression("wink");
-      } else {
-        setExpression("smile");
-      }
-
       const emmaReply: Message = {
         role: "emma",
         english: data.reply || data.error || "Sorry, I could not reply.",
         japanese: null,
         correction: null,
       };
+
+      const nextExpression = chooseExpressionFromReply(emmaReply.english);
+      setExpression(nextExpression);
 
       setMessages((prev) => [...prev, emmaReply]);
 
@@ -290,17 +359,33 @@ export default function Home() {
           <CardContent className="p-0">
             <div className="relative h-80 overflow-hidden bg-pink-100">
               <motion.img
-                src={emmaImages[expression]}
+                src={currentImage}
                 alt="Emma"
                 className="h-full w-full object-cover object-top"
                 animate={
                   isSpeaking
-                    ? { scale: [1, 1.02, 1], y: [0, -2, 0] }
-                    : { scale: [1, 1.01, 1] }
+                    ? {
+                        scale: [1, 1.012, 1],
+                        y: [0, -1.5, 0],
+                      }
+                    : expression === "thinking"
+                    ? {
+                        scale: [1, 1.006, 1],
+                        x: [0, 1.5, -1.5, 0],
+                      }
+                    : expression === "surprised"
+                    ? {
+                        scale: [1, 1.018, 1],
+                      }
+                    : {
+                        scale: [1, 1.006, 1],
+                        y: [0, -1, 0],
+                      }
                 }
                 transition={{
-                  duration: isSpeaking ? 0.7 : 3,
+                  duration: isSpeaking ? 0.8 : 3.2,
                   repeat: Infinity,
+                  ease: "easeInOut",
                 }}
               />
 
@@ -366,6 +451,8 @@ export default function Home() {
               </div>
             </div>
           ))}
+
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="sticky bottom-0 rounded-3xl bg-white/90 p-3 shadow-xl backdrop-blur">
