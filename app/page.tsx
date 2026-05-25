@@ -93,14 +93,20 @@ export default function Home() {
     const voices = window.speechSynthesis.getVoices();
 
     return (
-      voices.find((voice) => voice.name.includes("Jenny")) ||
-      voices.find((voice) => voice.name.includes("Aria")) ||
-      voices.find((voice) => voice.name.includes("Samantha")) ||
-      voices.find((voice) => voice.name.includes("Zira")) ||
-      voices.find(
-        (voice) =>
-          voice.lang.startsWith("en") &&
-          voice.name.toLowerCase().includes("female")
+      voices.find((voice) =>
+        voice.name.toLowerCase().includes("google us english")
+      ) ||
+      voices.find((voice) =>
+        voice.name.toLowerCase().includes("samantha")
+      ) ||
+      voices.find((voice) =>
+        voice.name.toLowerCase().includes("ava")
+      ) ||
+      voices.find((voice) =>
+        voice.name.toLowerCase().includes("aria")
+      ) ||
+      voices.find((voice) =>
+        voice.name.toLowerCase().includes("jenny")
       ) ||
       voices.find((voice) => voice.lang === "en-US") ||
       voices.find((voice) => voice.lang.startsWith("en")) ||
@@ -115,8 +121,10 @@ export default function Home() {
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
-    utterance.rate = 0.82;
-    utterance.pitch = 1.12;
+
+    // 無料ブラウザ音声で一番かわいい寄り
+    utterance.rate = 0.92;
+    utterance.pitch = 1.38;
     utterance.volume = 1;
 
     const voice = getBestVoice();
@@ -177,16 +185,24 @@ export default function Home() {
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.continuous = true;
+    recognition.maxAlternatives = 3;
 
     recognition.onstart = () => {
       setIsListening(true);
     };
 
     recognition.onresult = (event: any) => {
-      const transcript =
-        event.results[event.results.length - 1][0].transcript;
+      const result = event.results[event.results.length - 1];
 
-      setInput(transcript);
+      let best = result[0];
+
+      for (let i = 1; i < result.length; i++) {
+        if (result[i].confidence > best.confidence) {
+          best = result[i];
+        }
+      }
+
+      setInput(best.transcript.trim());
     };
 
     recognition.onerror = () => {
