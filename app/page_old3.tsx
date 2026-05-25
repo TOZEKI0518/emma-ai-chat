@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mic,
@@ -14,18 +14,46 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const emmaImages = [
-  "/emma/emma1.png",
-  "/emma/emma2.png",
-  "/emma/emma3.png",
-  "/emma/emma4.png",
-  "/emma/emma5.png",
-  "/emma/emma6.png",
-  "/emma/emma7.png",
-  "/emma/emma8.png",
-];
+const expressionNames = [
+  "normal",
+  "smile",
+  "speaking",
+  "thinking",
+  "surprised",
+  "wink",
+] as const;
 
-const backgroundSrc = "/Room.png";
+type Expression = (typeof expressionNames)[number];
+
+const frameCountMap: Record<Expression, number> = {
+  normal: 5,
+  smile: 5,
+  speaking: 5,
+  thinking: 5,
+  surprised: 5,
+  wink: 5,
+};
+
+const getFrameSrcCandidates = (expression: Expression, frame: number) => {
+  const num = String(frame).padStart(2, "0");
+
+  return [
+    // 推奨配置:
+    // public/emma/normal/emma-normal-01.png
+    // public/emma/speaking/emma-speaking-01.png
+    `/emma/${expression}/emma-${expression}-${num}.png`,
+
+    // 今回のフォルダが public/normal, public/smile のように直下にある場合:
+    // public/normal/emma-normal-01.png
+    `/${expression}/emma-${expression}-${num}.png`,
+
+    // 旧配置:
+    // public/emma-normal-01.png
+    `/emma-${expression}-${num}.png`,
+  ];
+};
+
+const backgroundSrc = "/bg/room.png";
 
 type Message = {
   role: "user" | "emma";
@@ -52,12 +80,18 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [showJapanese, setShowJapanese] = useState(true);
   const [speechReady, setSpeechReady] = useState(false);
-  const [emmaImageIndex, setEmmaImageIndex] = useState(0);
+  const [expression, setExpression] = useState<Expression>("normal");
+  const [frame, setFrame] = useState(1);
+  const [imagePathIndex, setImagePathIndex] = useState(0);
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const currentImage = emmaImages[emmaImageIndex];
+  const imageCandidates = useMemo(() => {
+    return getFrameSrcCandidates(expression, frame);
+  }, [expression, frame]);
+
+  const currentImage = imageCandidates[imagePathIndex] ?? imageCandidates[0];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -71,27 +105,30 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!isSpeaking) {
-      setEmmaImageIndex(0);
-      return;
-    }
+    setFrame(1);
+    setImagePathIndex(0);
+  }, [expression]);
+
+  useEffect(() => {
+    let intervalMs = 700;
+
+    if (expression === "speaking") intervalMs = 130;
+    if (expression === "thinking") intervalMs = 520;
+    if (expression === "surprised") intervalMs = 260;
+    if (expression === "wink") intervalMs = 420;
+    if (expression === "smile") intervalMs = 650;
+    if (expression === "normal") intervalMs = 900;
 
     const timer = window.setInterval(() => {
-      setEmmaImageIndex((prev) => {
-        let next = Math.floor(Math.random() * emmaImages.length);
-
-        // 同じ画像が連続しにくいようにする
-        if (next === prev) {
-          next = (next + 1) % emmaImages.length;
-        }
-
-        return next;
+      setFrame((prev) => {
+        const maxFrame = frameCountMap[expression];
+        if (prev >= maxFrame) return 1;
+        return prev + 1;
       });
-    }, 220);
+    }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [isSpeaking]);
-
+  }, [expression]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -144,21 +181,21 @@ export default function Home() {
 
     utterance.onstart = () => {
       setIsSpeaking(true);
-      setEmmaImageIndex(Math.floor(Math.random() * emmaImages.length));
+      setExpression("speaking");
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      setEmmaImageIndex(0);
+      setExpression("smile");
 
       setTimeout(() => {
-        setEmmaImageIndex(0);
+        setExpression("normal");
       }, 1800);
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      setEmmaImageIndex(6);
+      setExpression("surprised");
     };
 
     window.speechSynthesis.speak(utterance);
@@ -194,7 +231,7 @@ export default function Home() {
 
     recognition.onstart = () => {
       setIsListening(true);
-      setEmmaImageIndex(0);
+      setExpression("thinking");
     };
 
     recognition.onresult = (event: any) => {
@@ -209,16 +246,51 @@ export default function Home() {
 
     recognition.onerror = () => {
       setIsListening(false);
-      setEmmaImageIndex(6);
+      setExpression("surprised");
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      setEmmaImageIndex(0);
+      setExpression("normal");
     };
 
     recognitionRef.current = recognition;
     recognition.start();
+  };
+
+  const chooseExpressionFromReply = (reply: string): Expression => {
+    const text = reply.toLowerCase();
+
+    if (
+      text.includes("wow") ||
+      text.includes("really") ||
+      text.includes("amazing") ||
+      text.includes("surprising")
+    ) {
+      return "surprised";
+    }
+
+    if (
+      text.includes("great") ||
+      text.includes("nice") ||
+      text.includes("good") ||
+      text.includes("wonderful") ||
+      text.includes("awesome") ||
+      text.includes("congratulations")
+    ) {
+      return "smile";
+    }
+
+    if (
+      text.includes("😉") ||
+      text.includes("cute") ||
+      text.includes("secret") ||
+      text.includes("between us")
+    ) {
+      return "wink";
+    }
+
+    return "smile";
   };
 
   const sendMessage = async () => {
@@ -226,7 +298,7 @@ export default function Home() {
 
     unlockSpeech();
     setIsSpeaking(false);
-    setEmmaImageIndex(0);
+    setExpression("thinking");
 
     const userText = input.trim();
 
@@ -263,7 +335,8 @@ export default function Home() {
         correction: data.correction || null,
       };
 
-      setEmmaImageIndex(Math.floor(Math.random() * emmaImages.length));
+      const nextExpression = chooseExpressionFromReply(emmaReply.english);
+      setExpression(nextExpression);
 
       setMessages((prev) => [...prev, emmaReply]);
 
@@ -271,7 +344,7 @@ export default function Home() {
         speak(emmaReply.english);
       }, 500);
     } catch {
-      setEmmaImageIndex(6);
+      setExpression("surprised");
 
       const errorReply: Message = {
         role: "emma",
@@ -313,7 +386,7 @@ export default function Home() {
         <Card className="overflow-hidden rounded-3xl shadow-xl">
           <CardContent className="p-0">
             <div className="relative h-80 overflow-hidden bg-pink-100">
-              {/* 背景は固定。public/Room.png を配置してください。 */}
+              {/* 背景は固定。public/bg/room.png を配置してください。 */}
               <img
                 src={backgroundSrc}
                 alt=""
@@ -325,16 +398,36 @@ export default function Home() {
 
               {/* キャラクターだけを動かす。背景は動かないので自然に見えます。 */}
               <motion.img
-                key={currentImage}
+                key={`${expression}-${frame}-${imagePathIndex}`}
                 src={currentImage}
                 alt="Emma"
                 className="absolute inset-0 h-full w-full object-contain object-bottom"
                 draggable={false}
+                onError={() => {
+                  setImagePathIndex((prev) => {
+                    const next = prev + 1;
+                    return next < imageCandidates.length ? next : prev;
+                  });
+                }}
                 animate={
                   isSpeaking
                     ? {
                         scale: [1, 1.012, 1],
                         y: [0, -1.5, 0],
+                      }
+                    : expression === "thinking"
+                    ? {
+                        scale: [1, 1.006, 1],
+                        x: [0, 1.5, -1.5, 0],
+                      }
+                    : expression === "surprised"
+                    ? {
+                        scale: [1, 1.018, 1],
+                      }
+                    : expression === "wink"
+                    ? {
+                        rotate: [0, -0.4, 0.4, 0],
+                        scale: [1, 1.01, 1],
                       }
                     : {
                         scale: [1, 1.006, 1],
