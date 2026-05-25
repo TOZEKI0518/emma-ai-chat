@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Mic,
+  Square,
   Send,
   Volume2,
   Sparkles,
@@ -58,6 +59,7 @@ export default function Home() {
   const [currentEmmaImage, setCurrentEmmaImage] = useState("/emma/emma1.png");
 
   const recognitionRef = useRef<any>(null);
+  const listeningRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -142,6 +144,15 @@ export default function Home() {
     }, 300);
   };
 
+  const stopListening = () => {
+    listeningRef.current = false;
+    setIsListening(false);
+
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  };
+
   const startListening = () => {
     if (typeof window === "undefined") return;
 
@@ -158,11 +169,14 @@ export default function Home() {
       return;
     }
 
+    listeningRef.current = true;
+    setIsListening(true);
+
     const recognition = new SpeechRecognition();
 
     recognition.lang = "en-US";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
 
     recognition.onstart = () => {
       setIsListening(true);
@@ -179,11 +193,29 @@ export default function Home() {
     };
 
     recognition.onerror = () => {
-      setIsListening(false);
+      if (!listeningRef.current) {
+        setIsListening(false);
+      }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
+      if (listeningRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          setTimeout(() => {
+            if (listeningRef.current) {
+              try {
+                recognition.start();
+              } catch {
+                setIsListening(false);
+              }
+            }
+          }, 400);
+        }
+      } else {
+        setIsListening(false);
+      }
     };
 
     recognitionRef.current = recognition;
@@ -194,6 +226,7 @@ export default function Home() {
     if (!input.trim()) return;
 
     unlockSpeech();
+    stopListening();
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
 
@@ -364,14 +397,24 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
-              onClick={startListening}
+              onClick={() => {
+                if (isListening) {
+                  stopListening();
+                } else {
+                  startListening();
+                }
+              }}
               className={`h-11 w-11 rounded-full ${
                 isListening
                   ? "bg-rose-400 text-white"
                   : "bg-rose-100 text-rose-500"
               }`}
             >
-              <Mic className="h-5 w-5" />
+              {isListening ? (
+                <Square className="h-5 w-5 fill-white" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
             </Button>
 
             <input
