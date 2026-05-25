@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+const backgroundSrc = "/Room.png";
+
 const emmaImages = [
   "/emma/emma1.png",
   "/emma/emma2.png",
@@ -24,8 +26,6 @@ const emmaImages = [
   "/emma/emma7.png",
   "/emma/emma8.png",
 ];
-
-const backgroundSrc = "/Room.png";
 
 type Message = {
   role: "user" | "emma";
@@ -45,6 +45,10 @@ const initialMessages: Message[] = [
   },
 ];
 
+const getRandomEmmaImage = () => {
+  return emmaImages[Math.floor(Math.random() * emmaImages.length)];
+};
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -52,12 +56,10 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [showJapanese, setShowJapanese] = useState(true);
   const [speechReady, setSpeechReady] = useState(false);
-  const [emmaImageIndex, setEmmaImageIndex] = useState(0);
+  const [currentEmmaImage, setCurrentEmmaImage] = useState("/emma/emma1.png");
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
-  const currentImage = emmaImages[emmaImageIndex];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -69,29 +71,6 @@ export default function Home() {
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
-
-  useEffect(() => {
-    if (!isSpeaking) {
-      setEmmaImageIndex(0);
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setEmmaImageIndex((prev) => {
-        let next = Math.floor(Math.random() * emmaImages.length);
-
-        // 同じ画像が連続しにくいようにする
-        if (next === prev) {
-          next = (next + 1) % emmaImages.length;
-        }
-
-        return next;
-      });
-    }, 220);
-
-    return () => window.clearInterval(timer);
-  }, [isSpeaking]);
-
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -144,21 +123,16 @@ export default function Home() {
 
     utterance.onstart = () => {
       setIsSpeaking(true);
-      setEmmaImageIndex(Math.floor(Math.random() * emmaImages.length));
+      setCurrentEmmaImage(getRandomEmmaImage());
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      setEmmaImageIndex(0);
-
-      setTimeout(() => {
-        setEmmaImageIndex(0);
-      }, 1800);
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      setEmmaImageIndex(6);
+      setCurrentEmmaImage("/emma/emma8.png");
     };
 
     window.speechSynthesis.speak(utterance);
@@ -194,7 +168,6 @@ export default function Home() {
 
     recognition.onstart = () => {
       setIsListening(true);
-      setEmmaImageIndex(0);
     };
 
     recognition.onresult = (event: any) => {
@@ -209,12 +182,10 @@ export default function Home() {
 
     recognition.onerror = () => {
       setIsListening(false);
-      setEmmaImageIndex(6);
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      setEmmaImageIndex(0);
     };
 
     recognitionRef.current = recognition;
@@ -225,8 +196,6 @@ export default function Home() {
     if (!input.trim()) return;
 
     unlockSpeech();
-    setIsSpeaking(false);
-    setEmmaImageIndex(0);
 
     const userText = input.trim();
 
@@ -263,16 +232,12 @@ export default function Home() {
         correction: data.correction || null,
       };
 
-      setEmmaImageIndex(Math.floor(Math.random() * emmaImages.length));
-
       setMessages((prev) => [...prev, emmaReply]);
 
       setTimeout(() => {
         speak(emmaReply.english);
       }, 500);
     } catch {
-      setEmmaImageIndex(6);
-
       const errorReply: Message = {
         role: "emma",
         english: "Sorry, something went wrong.",
@@ -313,7 +278,6 @@ export default function Home() {
         <Card className="overflow-hidden rounded-3xl shadow-xl">
           <CardContent className="p-0">
             <div className="relative h-80 overflow-hidden bg-pink-100">
-              {/* 背景は固定。public/Room.png を配置してください。 */}
               <img
                 src={backgroundSrc}
                 alt=""
@@ -323,10 +287,8 @@ export default function Home() {
 
               <div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-white/10" />
 
-              {/* キャラクターだけを動かす。背景は動かないので自然に見えます。 */}
               <motion.img
-                key={currentImage}
-                src={currentImage}
+                src={currentEmmaImage}
                 alt="Emma"
                 className="absolute inset-0 h-full w-full object-contain object-bottom"
                 draggable={false}
