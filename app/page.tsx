@@ -53,7 +53,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [activeReplay, setActiveReplay] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [languageMode, setLanguageMode] = useState<"en" | "ja">("en");
   const [speechReady, setSpeechReady] = useState(false);
@@ -111,10 +111,10 @@ export default function Home() {
   const speak = (text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-    if (isSpeaking && speakingText === text) {
+    if (activeReplay === text) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
-      setSpeakingText(null);
+      setActiveReplay(null);
       return;
     }
 
@@ -131,18 +131,18 @@ export default function Home() {
 
     utterance.onstart = () => {
       setIsSpeaking(true);
-      setSpeakingText(text);
+      setActiveReplay(text);
       setCurrentEmmaImage(getRandomEmmaImage());
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      setSpeakingText(null);
+      // activeReplayは消さない。もう一度ボタンを押した時だけOFFにする。
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      setSpeakingText(null);
+      setActiveReplay(null);
     };
 
     window.speechSynthesis.speak(utterance);
@@ -283,7 +283,7 @@ export default function Home() {
             }
           >
             <Languages className="mr-1 h-4 w-4" />
-            {languageMode === "en" ? "EN" : "JP"}
+            {languageMode === "en" ? "日本語" : "English"}
           </Button>
         </header>
 
@@ -376,9 +376,7 @@ export default function Home() {
                     }}
                   >
                     <Volume2 className="h-3.5 w-3.5" />
-                    {isSpeaking && speakingText === msg.english
-                      ? "Stop"
-                      : "Replay"}
+                    {activeReplay === msg.english ? "Stop" : "Replay"}
                   </button>
                 )}
               </div>
