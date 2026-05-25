@@ -175,7 +175,7 @@ export default function Home() {
     const recognition = new SpeechRecognition();
 
     recognition.lang = "en-US";
-    recognition.interimResults = true;
+    recognition.interimResults = false;
     recognition.continuous = true;
 
     recognition.onstart = () => {
@@ -183,11 +183,8 @@ export default function Home() {
     };
 
     recognition.onresult = (event: any) => {
-      let transcript = "";
-
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
+      const transcript =
+        event.results[event.results.length - 1][0].transcript;
 
       setInput(transcript);
     };
@@ -325,7 +322,7 @@ export default function Home() {
               <img
                 src={currentEmmaImage}
                 alt="Emma"
-                className="absolute inset-0 h-full w-full object-contain object-center"
+                className="absolute bottom-0 left-1/2 h-full w-auto -translate-x-1/2 object-cover"
                 draggable={false}
               />
 
