@@ -40,7 +40,7 @@ const initialMessages: Message[] = [
     english:
       "Hi Takuma! I'm Emma. Let's talk in English today. How was your day?",
     japanese:
-      "こんにちは、Takuma！Emmaだよ。今日は英語で話そう。今日はどんな一日だった？",
+      "こんにちは、タクマ！エマです。今日は英語で話しましょう。今日はどんな一日でしたか？",
     correction: null,
   },
 ];
@@ -53,8 +53,9 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingText, setSpeakingText] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
-  const [showJapanese, setShowJapanese] = useState(true);
+  const [languageMode, setLanguageMode] = useState<"en" | "ja">("en");
   const [speechReady, setSpeechReady] = useState(false);
   const [currentEmmaImage, setCurrentEmmaImage] = useState("/emma/emma1.png");
 
@@ -110,12 +111,19 @@ export default function Home() {
   const speak = (text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
 
+    if (isSpeaking && speakingText === text) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      setSpeakingText(null);
+      return;
+    }
+
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
-    utterance.rate = 0.9;
-    utterance.pitch = 1.15;
+    utterance.rate = 0.82;
+    utterance.pitch = 1.12;
     utterance.volume = 1;
 
     const voice = getBestVoice();
@@ -123,16 +131,18 @@ export default function Home() {
 
     utterance.onstart = () => {
       setIsSpeaking(true);
+      setSpeakingText(text);
       setCurrentEmmaImage(getRandomEmmaImage());
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
+      setSpeakingText(null);
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      setCurrentEmmaImage("/emma/emma8.png");
+      setSpeakingText(null);
     };
 
     window.speechSynthesis.speak(utterance);
@@ -268,10 +278,12 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowJapanese(!showJapanese)}
+            onClick={() =>
+              setLanguageMode((prev) => (prev === "en" ? "ja" : "en"))
+            }
           >
             <Languages className="mr-1 h-4 w-4" />
-            JP
+            {languageMode === "en" ? "EN" : "JP"}
           </Button>
         </header>
 
@@ -343,13 +355,11 @@ export default function Home() {
                   {msg.role === "user" ? "You" : "Emma"}
                 </div>
 
-                <p className="text-sm leading-relaxed">{msg.english}</p>
-
-                {showJapanese && msg.japanese && (
-                  <p className="mt-2 border-t pt-2 text-xs text-slate-500">
-                    {msg.japanese}
-                  </p>
-                )}
+                <p className="text-sm leading-relaxed">
+                  {languageMode === "en"
+                    ? msg.english
+                    : msg.japanese || msg.english}
+                </p>
 
                 {msg.correction && (
                   <p className="mt-2 rounded-2xl bg-white/20 p-2 text-xs">
@@ -366,7 +376,9 @@ export default function Home() {
                     }}
                   >
                     <Volume2 className="h-3.5 w-3.5" />
-                    Replay
+                    {isSpeaking && speakingText === msg.english
+                      ? "Stop"
+                      : "Replay"}
                   </button>
                 )}
               </div>
