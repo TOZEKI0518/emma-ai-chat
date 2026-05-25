@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
 import {
   Mic,
   Send,
   Volume2,
+  Square,
   Sparkles,
   MessageCircle,
   Languages,
@@ -61,6 +61,11 @@ export default function Home() {
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const activeReplayRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeReplayRef.current = activeReplay;
+  }, [activeReplay]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -108,50 +113,58 @@ export default function Home() {
     );
   };
 
+  const stopSpeaking = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    setIsSpeaking(false);
+    setActiveReplay(null);
+    activeReplayRef.current = null;
+  };
+
   const speak = (text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-    if (activeReplay === text) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      setActiveReplay(null);
+    if (activeReplayRef.current === text) {
+      stopSpeaking();
       return;
     }
 
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.82;
-    utterance.pitch = 1.12;
-    utterance.volume = 1;
+    setActiveReplay(text);
+    activeReplayRef.current = text;
+    setIsSpeaking(true);
+    setCurrentEmmaImage(getRandomEmmaImage());
 
-    const voice = getBestVoice();
-    if (voice) utterance.voice = voice;
+    const speakLoop = () => {
+      if (activeReplayRef.current !== text) return;
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setActiveReplay(text);
-      setCurrentEmmaImage(getRandomEmmaImage());
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      utterance.lang = "en-US";
+      utterance.rate = 0.82;
+      utterance.pitch = 1.12;
+      utterance.volume = 1;
+
+      const voice = getBestVoice();
+      if (voice) utterance.voice = voice;
+
+      utterance.onend = () => {
+        if (activeReplayRef.current === text) {
+          speakLoop();
+        }
+      };
+
+      utterance.onerror = () => {
+        stopSpeaking();
+      };
+
+      window.speechSynthesis.speak(utterance);
     };
 
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      // activeReplayは消さない。もう一度ボタンを押した時だけOFFにする。
-    };
-
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setActiveReplay(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
-
-    setTimeout(() => {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
-    }, 300);
+    speakLoop();
   };
 
   const startListening = () => {
@@ -206,6 +219,7 @@ export default function Home() {
     if (!input.trim()) return;
 
     unlockSpeech();
+    stopSpeaking();
 
     const userText = input.trim();
 
@@ -299,27 +313,11 @@ export default function Home() {
 
               <div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-white/10" />
 
-              <motion.img
+              <img
                 src={currentEmmaImage}
                 alt="Emma"
                 className="absolute inset-0 h-full w-full object-contain object-bottom"
                 draggable={false}
-                animate={
-                  isSpeaking
-                    ? {
-                        scale: [1, 1.012, 1],
-                        y: [0, -1.5, 0],
-                      }
-                    : {
-                        scale: [1, 1.006, 1],
-                        y: [0, -1, 0],
-                      }
-                }
-                transition={{
-                  duration: isSpeaking ? 0.8 : 3.2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
               />
 
               <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold shadow">
@@ -369,14 +367,23 @@ export default function Home() {
 
                 {msg.role === "emma" && (
                   <button
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-rose-500"
+                    className="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-rose-500 hover:bg-rose-50"
                     onClick={() => {
                       unlockSpeech();
                       speak(msg.english);
                     }}
                   >
-                    <Volume2 className="h-3.5 w-3.5" />
-                    {activeReplay === msg.english ? "Stop" : "Replay"}
+                    {activeReplay === msg.english ? (
+                      <>
+                        <Square className="h-3.5 w-3.5 fill-rose-500" />
+                        Stop
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="h-3.5 w-3.5" />
+                        Replay
+                      </>
+                    )}
                   </button>
                 )}
               </div>
