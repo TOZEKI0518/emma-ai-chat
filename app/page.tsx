@@ -5,7 +5,6 @@ import {
   Mic,
   Send,
   Volume2,
-  Square,
   Sparkles,
   MessageCircle,
   Languages,
@@ -53,7 +52,6 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [activeReplay, setActiveReplay] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [languageMode, setLanguageMode] = useState<"en" | "ja">("en");
   const [speechReady, setSpeechReady] = useState(false);
@@ -61,11 +59,6 @@ export default function Home() {
 
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const activeReplayRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    activeReplayRef.current = activeReplay;
-  }, [activeReplay]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -113,58 +106,40 @@ export default function Home() {
     );
   };
 
-  const stopSpeaking = () => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-
-    setIsSpeaking(false);
-    setActiveReplay(null);
-    activeReplayRef.current = null;
-  };
-
   const speak = (text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-    if (activeReplayRef.current === text) {
-      stopSpeaking();
-      return;
-    }
-
     window.speechSynthesis.cancel();
 
-    setActiveReplay(text);
-    activeReplayRef.current = text;
-    setIsSpeaking(true);
-    setCurrentEmmaImage(getRandomEmmaImage());
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.82;
+    utterance.pitch = 1.12;
+    utterance.volume = 1;
 
-    const speakLoop = () => {
-      if (activeReplayRef.current !== text) return;
+    const voice = getBestVoice();
+    if (voice) utterance.voice = voice;
 
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      utterance.lang = "en-US";
-      utterance.rate = 0.82;
-      utterance.pitch = 1.12;
-      utterance.volume = 1;
-
-      const voice = getBestVoice();
-      if (voice) utterance.voice = voice;
-
-      utterance.onend = () => {
-        if (activeReplayRef.current === text) {
-          speakLoop();
-        }
-      };
-
-      utterance.onerror = () => {
-        stopSpeaking();
-      };
-
-      window.speechSynthesis.speak(utterance);
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setCurrentEmmaImage(getRandomEmmaImage());
     };
 
-    speakLoop();
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+
+    setTimeout(() => {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }, 300);
   };
 
   const startListening = () => {
@@ -219,7 +194,8 @@ export default function Home() {
     if (!input.trim()) return;
 
     unlockSpeech();
-    stopSpeaking();
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
 
     const userText = input.trim();
 
@@ -301,7 +277,7 @@ export default function Home() {
           </Button>
         </header>
 
-        <Card className="overflow-hidden rounded-3xl shadow-xl">
+        <Card className="sticky top-3 z-20 overflow-hidden rounded-3xl shadow-xl">
           <CardContent className="p-0">
             <div className="relative h-80 overflow-hidden bg-pink-100">
               <img
@@ -316,7 +292,7 @@ export default function Home() {
               <img
                 src={currentEmmaImage}
                 alt="Emma"
-                className="absolute inset-0 h-full w-full object-contain object-bottom"
+                className="absolute inset-0 h-full w-full object-contain object-center"
                 draggable={false}
               />
 
@@ -367,23 +343,14 @@ export default function Home() {
 
                 {msg.role === "emma" && (
                   <button
-                    className="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-rose-500 hover:bg-rose-50"
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-rose-500"
                     onClick={() => {
                       unlockSpeech();
                       speak(msg.english);
                     }}
                   >
-                    {activeReplay === msg.english ? (
-                      <>
-                        <Square className="h-3.5 w-3.5 fill-rose-500" />
-                        Stop
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="h-3.5 w-3.5" />
-                        Replay
-                      </>
-                    )}
+                    <Volume2 className="h-3.5 w-3.5" />
+                    Replay
                   </button>
                 )}
               </div>
