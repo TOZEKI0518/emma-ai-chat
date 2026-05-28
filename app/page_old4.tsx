@@ -265,14 +265,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           message: userText,
-
-          // 無料枠節約：会話履歴を直近6件だけ送る
-          history: newMessages.slice(-6),
-
-          // API側でこの値を使うと、添削を短く・少なめにできます
-          correctionMode: "minimal",
-          instruction:
-            "Keep replies short and natural. Only correct the user's English when it is clearly unnatural. If you correct, give only one short sentence. Do not explain grammar in detail. Continue the conversation naturally.",
+          history: newMessages,
         }),
       });
 
